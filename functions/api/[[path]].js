@@ -9,10 +9,10 @@
 // Every outside service is optional: leave its secret unset and that feature is switched off
 // and hidden in the app. Signed-out visitors keep working in their own browser, as before.
 //
-// Bindings: DB (D1), BLOBS (R2), EMAIL (send_email, optional).
-// Secrets:  GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, ANTHROPIC_API_KEY, OPENAI_API_KEY or GEMINI_API_KEY,
+// Bindings: DB (D1), BLOBS (R2).
+// Secrets:  EMAIL_API_TOKEN (Cloudflare token allowed to send email), GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, ANTHROPIC_API_KEY, OPENAI_API_KEY or GEMINI_API_KEY,
 //           STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_ID.
-// Vars:     MAIL_FROM, PRICE_LABEL (shown on the landing page), CHAT_MODEL, IMAGE_MODEL, DEV_LINKS (=1 returns sign-in links instead of emailing them).
+// Vars:     CF_ACCOUNT_ID, MAIL_FROM, PRICE_LABEL (shown on the landing page), CHAT_MODEL, IMAGE_MODEL, DEV_LINKS (=1 returns sign-in links instead of emailing them).
 import { generateImage } from '../../public/js/ai/providers.js';
 
 const ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -80,7 +80,7 @@ export async function onRequest({ request: req, env }) {
 
 async function route(req, env) {
   const url = new URL(req.url), p = decodeURIComponent(url.pathname), M = req.method;
-  const on = { email: !!(env.DEV_LINKS === '1' || (env.EMAIL && env.MAIL_FROM)), google: !!env.GOOGLE_CLIENT_ID, ai: !!env.ANTHROPIC_API_KEY, images: !!(env.OPENAI_API_KEY || env.GEMINI_API_KEY), billing: !!(env.STRIPE_SECRET_KEY && env.STRIPE_PRICE_ID) };
+  const on = { email: !!(env.DEV_LINKS === '1' || (env.EMAIL_API_TOKEN && env.CF_ACCOUNT_ID && env.MAIL_FROM)), google: !!env.GOOGLE_CLIENT_ID, ai: !!env.ANTHROPIC_API_KEY, images: !!(env.OPENAI_API_KEY || env.GEMINI_API_KEY), billing: !!(env.STRIPE_SECRET_KEY && env.STRIPE_PRICE_ID) };
 
   // Stripe calls this one itself; it proves who it is with a signature instead of a cookie
   if (p === '/api/stripe/webhook' && M === 'POST') {
@@ -113,7 +113,12 @@ async function route(req, env) {
     ]);
     if (env.DEV_LINKS === '1') return json({ ok: true, link });
     const text = `Open this link to sign in to Parter. It works once and for ${LINK_MINUTES} minutes.\n\n${link}\n\nIf you did not ask for it, ignore this message.`;
-    try { await env.EMAIL.send({ to: email, from: { email: env.MAIL_FROM, name: 'Parter' }, subject: 'Your sign-in link for Parter', text, html: `<p>Open this link to sign in to Parter. It works once and for ${LINK_MINUTES} minutes.</p><p><a href="${link}">Sign in to Parter</a></p><p>If you did not ask for it, ignore this message.</p>` }); }
+    // Pages Functions cannot bind Cloudflare's email service, so it is called over its REST API
+    try {
+      const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/email/sending/send`, { method: 'POST', headers: { authorization: 'Bearer ' + env.EMAIL_API_TOKEN, 'content-type': 'application/json' },
+        body: JSON.stringify({ to: email, from: { address: env.MAIL_FROM, name: 'Parter' }, subject: 'Your sign-in link for Parter', text, html: `<p>Open this link to sign in to Parter. It works once and for ${LINK_MINUTES} minutes.</p><p><a href="${link}">Sign in to Parter</a></p><p>If you did not ask for it, ignore this message.</p>` }) });
+      if (!r.ok) throw new Error(r.status + ' ' + await r.text());
+    }
     catch (e) { console.error('email', e); return fail(503, 'We could not send the email. Try again in a minute, or use another way to sign in.'); }
     return json({ ok: true });
   }

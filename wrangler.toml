@@ -5,7 +5,8 @@ pages_build_output_dir = "public"
 compatibility_date = "2026-01-01"
 
 [vars]
-# MAIL_FROM = "signin@codeaz.org"   # set once the domain can send email; this switches email sign-in on
+CF_ACCOUNT_ID = "cc567f3407c4d2a648fff78698d722bc"
+# MAIL_FROM = "signin@codeaz.org"   # set once the domain can send email; with the EMAIL_API_TOKEN secret this switches email sign-in on
 PRICE_LABEL = "€15 a month"
 
 [[d1_databases]]
@@ -17,6 +18,3 @@ migrations_dir = "migrations"
 [[r2_buckets]]
 binding = "BLOBS"
 bucket_name = "parter-blobs"
-
-[[send_email]]
-name = "EMAIL"

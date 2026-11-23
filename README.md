@@ -85,7 +85,7 @@ Every outside service is optional. A feature appears in the app once its setting
 
 | Feature | Needs |
 |---|---|
-| Sign in by emailed link | Cloudflare Email Sending enabled for your domain, and `MAIL_FROM` in `wrangler.toml` |
+| Sign in by emailed link | Cloudflare Email Sending enabled for your domain, `CF_ACCOUNT_ID` and `MAIL_FROM` in `wrangler.toml`, and `EMAIL_API_TOKEN` (an API token allowed to send email) |
 | Sign in with Google | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`; redirect address `https://<site>/api/auth/google/callback` |
 | Included assistant and plan reading | `ANTHROPIC_API_KEY` (optional `CHAT_MODEL`) |
 | Included renders | `OPENAI_API_KEY` or `GEMINI_API_KEY` (optional `IMAGE_MODEL`) |
