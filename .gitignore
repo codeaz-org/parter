@@ -6,3 +6,4 @@ node_modules/
 # Your own plans and pictures (local mode). Remove these two lines if you want them in git.
 projects/*
 !projects/.gitkeep
+.dev.vars

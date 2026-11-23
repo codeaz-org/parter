@@ -17,7 +17,9 @@ export async function initPanels(A) {
   // =====================================================================================
   // settings
   // =====================================================================================
-  const defaults = () => ({ chat: { engine: store.agent ? 'claude-code' : 'anthropic', keys: {}, models: {}, bases: {} }, image: { provider: 'openai', keys: {}, models: {} } });
+  // signed in on the hosted site: the assistant and renders can run on the site's keys, within the account's allowance
+  const C = store.cloud, U = store.user, incChat = !!(U && C.on.ai), incImg = !!(U && C.on.images), INC = 'Included with your account';
+  const defaults = () => ({ chat: { engine: store.agent ? 'claude-code' : incChat ? 'parter' : 'anthropic', keys: {}, models: {}, bases: {} }, image: { provider: incImg ? 'parter' : 'openai', keys: {}, models: {} } });
   let S = Object.assign(defaults(), store.settings());
   S.chat = Object.assign(defaults().chat, S.chat); S.image = Object.assign(defaults().image, S.image);
   if (S.chat.engine === 'claude-code' && !store.agent) S.chat.engine = 'anthropic';
@@ -25,10 +27,12 @@ export async function initPanels(A) {
   function chatCfg() {
     const e = S.chat.engine;
     if (e === 'claude-code') return { engine: e, label: 'Claude Code on this computer' };
+    if (e === 'parter') return { engine: e, label: INC, format: 'anthropic', baseUrl: location.origin + '/api/ai', model: 'included', key: 'account' };
     const p = PRESETS[e] || PRESETS.anthropic;
     return { engine: e, label: p.label, format: p.format, baseUrl: S.chat.bases[e] || p.baseUrl, model: S.chat.models[e] || p.model, key: S.chat.keys[e] || '' };
   }
   function imageCfg() {
+    if (S.image.provider === 'parter') return { provider: 'parter', label: INC, model: 'included', key: 'account' };
     const p = S.image.provider, d = IMAGE_PRESETS[p] || IMAGE_PRESETS.openai;
     // an OpenAI or Gemini chat key works for pictures too, so do not make people paste it twice
     const fallback = p === 'openai' ? S.chat.keys.openai : p === 'gemini' ? S.chat.keys.gemini : '';
@@ -36,29 +40,35 @@ export async function initPanels(A) {
   }
   const chatReady = c => c.engine === 'claude-code' || (!!c.model && (c.format !== 'anthropic' || !!c.key) && (c.engine === 'local' || !!c.key));
 
+  if (S.chat.engine === 'parter' ? !incChat : incChat && !chatReady(chatCfg())) S.chat.engine = incChat ? 'parter' : 'anthropic';
+  if (S.image.provider === 'parter' ? !incImg : incImg && !imageCfg().key) S.image.provider = incImg ? 'parter' : 'openai';
+
   const sChat = $('#sChat'), sImg = $('#sImg');
+  if (incChat) sChat.add(new Option(INC, 'parter'));
+  if (incImg) sImg.add(new Option(INC, 'parter'));
   for (const k in PRESETS) sChat.add(new Option(PRESETS[k].label, k));
   if (store.local) sChat.add(new Option(store.agent ? 'Claude Code on this computer' : 'Claude Code (not found on this computer)', 'claude-code'), 0);
   for (const k in IMAGE_PRESETS) sImg.add(new Option(IMAGE_PRESETS[k].label, k));
   let shownChat = null, shownImg = null;
   function stash() {
-    if (shownChat && shownChat !== 'claude-code') { S.chat.keys[shownChat] = $('#sKey').value.trim(); S.chat.models[shownChat] = $('#sModel').value.trim(); S.chat.bases[shownChat] = $('#sBase').value.trim(); }
-    if (shownImg) { S.image.keys[shownImg] = $('#sImgKey').value.trim(); S.image.models[shownImg] = $('#sImgModel').value.trim(); }
+    if (shownChat && shownChat !== 'claude-code' && shownChat !== 'parter') { S.chat.keys[shownChat] = $('#sKey').value.trim(); S.chat.models[shownChat] = $('#sModel').value.trim(); S.chat.bases[shownChat] = $('#sBase').value.trim(); }
+    if (shownImg && shownImg !== 'parter') { S.image.keys[shownImg] = $('#sImgKey').value.trim(); S.image.models[shownImg] = $('#sImgModel').value.trim(); }
   }
   function showSettings() {
-    const e = sChat.value, cc = e === 'claude-code', p = PRESETS[e];
+    const e = sChat.value, cc = e === 'claude-code' || e === 'parter', p = PRESETS[e];
     for (const el of $$('#setScrim .k')) el.hidden = cc;
     if (!cc) {
       $('#sKey').value = S.chat.keys[e] || ''; $('#sKey').placeholder = p.keyHint;
       $('#sModel').value = S.chat.models[e] || p.model; $('#sModel').placeholder = p.model || 'model name, as the provider lists it';
       $('#sBase').value = S.chat.bases[e] || p.baseUrl;
     }
-    $('#sChatNote').textContent = cc
+    $('#sChatNote').textContent = e === 'parter' ? 'No key needed. Your account includes a number of assistant requests each month; Account shows how many are left.' : cc
       ? (store.agent ? 'Requests go to the Claude Code CLI on this computer, which edits the project file through Parter’s MCP tools. No API key is needed; it uses your Claude Code sign-in.' : 'Install Claude Code and restart “npm start” to use it here.')
       : e === 'openai' ? 'Parter speaks the Chat Completions format. Some of OpenAI’s newest models only allow tools through their Responses API; if the assistant answers but changes nothing, pick a model that supports tools on Chat Completions.'
         : e === 'local' ? 'Any server that speaks the OpenAI Chat Completions format. The model needs tool calling; plan reading also needs vision.' : '';
-    const ip = sImg.value, d = IMAGE_PRESETS[ip];
+    const ip = sImg.value, d = IMAGE_PRESETS[ip] || { keyHint: 'not needed', model: '' };
     $('#sImgKey').value = S.image.keys[ip] || ''; $('#sImgKey').placeholder = d.keyHint; $('#sImgModel').value = S.image.models[ip] || d.model;
+    $('#sImgKey').disabled = $('#sImgModel').disabled = ip === 'parter';
     shownChat = e; shownImg = ip;
   }
   sChat.onchange = () => { stash(); showSettings(); };
@@ -72,13 +82,53 @@ export async function initPanels(A) {
   $('#chatSettings').onclick = openSettings;
 
   // =====================================================================================
+  // account (hosted site only)
+  // =====================================================================================
+  async function api(path, method = 'POST', body, signal) {
+    const r = await fetch(path, { method, headers: { 'content-type': 'application/json' }, body: body && JSON.stringify(body), signal });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error((j.error && j.error.message) || 'That did not work (' + r.status + ').');
+    return j;
+  }
+  async function copyText(text, done) {
+    try { await navigator.clipboard.writeText(text); A.toast(done, 6000); } catch (e) { window.prompt('Copy this link', text); }
+  }
+  if (C) {
+    const btn = $('#acctBtn'), st = m => { $('#acctStatus').textContent = m; };
+    btn.hidden = !U && !C.on.email && !C.on.google; btn.textContent = U ? 'Account' : 'Sign in';
+    $('#acctIn').hidden = !!U; $('#acctOut').hidden = !U; $('#acctGoogle').hidden = !C.on.google; $('#acctMail').hidden = !C.on.email;
+    btn.onclick = () => { st(''); A.openSheet('#acctScrim'); };
+    $('#acctForm').onsubmit = async e => {
+      e.preventDefault(); const b = $('#acctSend'); b.disabled = true;
+      try { const j = await api('api/auth/email', 'POST', { email: $('#acctEmail').value }); if (j.link) location.href = j.link; else st('Check your inbox. The link works once and for 20 minutes.'); }
+      catch (err) { st(err.message); } finally { b.disabled = false; }
+    };
+    if (U) {
+      const L = C.limits[U.plan] || C.limits.free, pro = U.plan === 'pro';
+      $('#acctWho').textContent = U.email;
+      $('#acctPlan').textContent = (pro ? 'Pro plan' : 'Free plan') + ' · up to ' + L.plans + ' plans';
+      $('#acctUse').textContent = (C.on.ai ? U.usage.chat + ' of ' + L.chat + ' assistant requests' : '') + (C.on.ai && C.on.images ? ' and ' : '') + (C.on.images ? U.usage.renders + ' of ' + L.renders + ' renders' : '') + (C.on.ai || C.on.images ? ' used this month.' : '');
+      $('#acctUp').hidden = !C.on.billing || pro; $('#acctBill').hidden = !C.on.billing || !pro;
+      $('#acctUpNote').hidden = $('#acctUp').hidden;
+      $('#acctUpNote').textContent = 'Pro gives you ' + C.limits.pro.chat + ' assistant requests, ' + C.limits.pro.renders + ' renders and ' + C.limits.pro.plans + ' plans. You see the price before you pay and can cancel at any time.';
+      const go = path => async () => { try { location.href = (await api(path)).url; } catch (err) { st(err.message); } };
+      $('#acctUp').onclick = go('api/billing/checkout'); $('#acctBill').onclick = go('api/billing/portal');
+      $('#acctSignOut').onclick = async () => { await flush(); await api('api/auth/logout').catch(() => {}); location.href = './'; };
+      $('#acctDelete').onclick = async () => {
+        if (!window.confirm('Delete your account, every plan and picture in it' + (pro ? ', and cancel your subscription' : '') + '? This cannot be undone.')) return;
+        try { await api('api/account', 'DELETE'); location.href = './'; } catch (err) { st(err.message); }
+      };
+    }
+  }
+
+  // =====================================================================================
   // projects
   // =====================================================================================
   let chatHistory = [], agentSession = null, renders = [];
 
   async function openProject(id) {
     const scene = await store.load(id);
-    if (!scene) { A.toast('That plan could not be opened.'); return false; }
+    if (!scene) { A.toast(store.saveError || 'That plan could not be opened.'); return false; }
     A.setScene(scene, id); lsSet(CUR, id);
     chatHistory = []; agentSession = null; $('#chatLog').textContent = ''; greet();
     await A.loadUnderlay(); loadRenders();
@@ -104,6 +154,13 @@ export async function initPanels(A) {
         renderProjects();
       });
       mk('Duplicate', async () => { await flush(); const s = await store.load(p.id); if (!s) return; s.name = (s.name + ' copy').slice(0, 80); const from = p.id; const id = await createAndOpen(s); const u = await store.getBlob(from + ':underlay'); if (u) { await store.putBlob(id + ':underlay', u); await A.loadUnderlay(); } renderProjects(); });
+      if (U) {
+        mk(p.share ? 'Copy link' : 'Share', async () => {
+          try { await flush(); const j = await api('api/projects/' + p.id + '/share'); await copyText(location.origin + '/app?shared=' + j.share, 'Link copied. Anyone who opens it gets their own copy of this plan.'); } catch (e) { A.toast(e.message); }
+          renderProjects();
+        });
+        if (p.share) mk('Stop sharing', async () => { try { await api('api/projects/' + p.id + '/share', 'DELETE'); A.toast('The link no longer works.'); } catch (e) { A.toast(e.message); } renderProjects(); });
+      }
       mk('Delete', async () => {
         if (!window.confirm('Delete “' + (p.name || p.id) + '”? This cannot be undone.')) return;
         await store.remove(p.id);
@@ -114,6 +171,8 @@ export async function initPanels(A) {
     }
     $('#storeNote').textContent = store.local
       ? 'Plans are saved as JSON files in the “projects” folder next to Parter, where Claude Code and other tools can edit them too.'
+      : U ? 'Plans are saved to your account (' + U.email + ') and open on any device where you sign in.'
+      : C && (C.on.email || C.on.google) ? 'Plans are saved in this browser only. Sign in to keep them in an account and open them on other devices.'
       : 'Plans are saved in this browser only. Use Export → Project file to back one up or move it to another device.';
   }
   $('#projBtn').onclick = () => { renderProjects(); A.openSheet('#projScrim'); };
@@ -264,9 +323,10 @@ export async function initPanels(A) {
     let prompt = $('#prompt').value.trim();
     if ($('#genDepth').checked) { const d = dataUrlParts(A.view.shot('depth', 1)); if (d) { images.push({ mime: d.mime, b64: d.b64, name: 'depth.png' }); prompt += '\n\nThe second image is a depth map of the same view (white is near, black is far). Use it only to keep the geometry exact; do not show it.'; } }
     const size = { '4:3': '1536x1024', '16:9': '1536x1024', '1:1': '1024x1024', '3:4': '1024x1536' }[A.V.asp];
-    genAbort = new AbortController(); $('#genBtn').textContent = 'Stop'; st('Rendering with ' + cfg.label + ' (' + cfg.model + '). This can take a minute.');
+    genAbort = new AbortController(); $('#genBtn').textContent = 'Stop'; st(cfg.provider === 'parter' ? 'Rendering. This can take a minute.' : 'Rendering with ' + cfg.label + ' (' + cfg.model + '). This can take a minute.');
     try {
-      const url = await generateImage(cfg, { prompt, images, size, signal: genAbort.signal });
+      const url = cfg.provider === 'parter' ? (await api('api/ai/image', 'POST', { prompt, images, size }, genAbort.signal)).url
+        : await generateImage(cfg, { prompt, images, size, signal: genAbort.signal });
       const t = Date.now(), key = A.id + ':render:' + t;
       if (url.startsWith('data:')) await store.putBlob(key, url);
       renders.unshift({ key, url, t }); paintGallery(); st('Done. Tap the picture to see it full size.');
@@ -279,11 +339,11 @@ export async function initPanels(A) {
   // =====================================================================================
   const log = $('#chatLog');
   const bubble = (cls, text) => { const d = document.createElement('div'); d.className = 'msg ' + cls; d.textContent = text; log.appendChild(d); log.scrollTop = log.scrollHeight; return d; };
-  function syncEngine() { const c = chatCfg(); $('#chatEngine').textContent = c.engine === 'claude-code' ? c.label : chatReady(c) ? c.label + ' · ' + c.model : 'not set up yet'; }
+  function syncEngine() { const c = chatCfg(); $('#chatEngine').textContent = c.engine === 'claude-code' || c.engine === 'parter' ? c.label : chatReady(c) ? c.label + ' · ' + c.model : 'not set up yet'; }
   function greet() {
     if (log.childElementCount) return;
     bubble('a', 'Tell me what to change and I will edit the plan: move or add furniture, resize windows, close or glaze doors, rename rooms, aim the camera.' +
-      (chatReady(chatCfg()) ? '' : '\n\nI need a model to run on first. Open Settings and add an API key' + (store.local ? ', or choose Claude Code.' : '.')));
+      (chatReady(chatCfg()) ? '' : '\n\nI need a model to run on first. Open Settings and add an API key' + (store.local ? ', or choose Claude Code.' : C && C.on.ai && !U ? ', or sign in to use the assistant included with an account.' : '.')));
   }
   $('#chatBtn').onclick = () => { const c = $('#chat'); c.hidden = !c.hidden; if (!c.hidden) { syncEngine(); greet(); $('#chatIn').focus(); } };
   $('#chatClose').onclick = () => { $('#chat').hidden = true; };
@@ -331,5 +391,17 @@ export async function initPanels(A) {
     try { await createAndOpen(await sampleScene(), 'frumusita'); A.hint('This is a sample house. Drag furniture to move it; the amber marker is your camera. Your own plans start under the name at the top left.'); }
     catch (e) { await createAndOpen(newScene('Untitled plan')); A.setPlanMode('build'); }
   } else if (!(await openProject(list.some(p => p.id === cur) ? cur : list[0].id))) await createAndOpen(newScene('Untitled plan'));
+  // coming back from a sign-in link, from checkout, or arriving on a shared link
+  const qs = new URLSearchParams(location.search), shared = qs.get('shared');
+  if (shared) {
+    try { const scene = normalizeScene(await api('api/shared/' + encodeURIComponent(shared), 'GET')); await flush(); if (await createAndOpen(scene) === A.id) A.toast('This is your own copy of the shared plan. Changes you make do not affect the original.', 7000); }
+    catch (e) { A.toast(e.message, 7000); }
+  }
+  const note = qs.get('signedin') ? 'You are signed in. Your plans are saved to your account.'
+    : qs.get('signin') === 'expired' ? 'That sign-in link has expired or was already used. Ask for a new one.'
+    : qs.get('signin') ? 'Signing in did not work. Please try again.'
+    : qs.get('upgraded') ? 'Thank you. Pro will show on your account within a minute.' : '';
+  if (note) A.toast(note, 7000);
+  if (location.search) history.replaceState(null, '', location.pathname);
   A.panels = { openProject, readPlan, chatCfg, imageCfg, send, flush };
 }

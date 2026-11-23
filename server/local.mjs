@@ -132,7 +132,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 404, { error: 'not found' });
     }
     // static files
-    let file = path.normalize(path.join(PUBLIC, p === '/' ? 'index.html' : p));
+    let file = path.normalize(path.join(PUBLIC, p === '/' || p === '/app' ? 'app.html' : p));
     if (!file.startsWith(PUBLIC)) return send(res, 403, 'forbidden', 'text/plain');
     try { const st = await fsp.stat(file); if (st.isDirectory()) file = path.join(file, 'index.html'); } catch (e) { return send(res, 404, 'not found', 'text/plain'); }
     res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-cache' });

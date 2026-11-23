@@ -1,6 +1,7 @@
 // Where projects live.
 //
-//   hosted (Cloudflare Pages, any static host):  this browser's storage, nothing leaves the device
+//   hosted, signed out (or any static host):     this browser's storage, nothing leaves the device
+//   hosted, signed in:                           the account, through functions/api (same routes as local)
 //   local  (npm start):                          JSON files in ./projects on your disk, so Claude Code
 //                                                and the MCP server can edit the same plan you see
 //
@@ -39,27 +40,43 @@ async function idbOp(mode, fn) {
 export const store = {
   local: false,          // true when served by server/local.mjs
   agent: false,          // true when that server can reach the Claude Code CLI
+  cloud: null,           // what the hosted backend offers: { on, limits, user }; null on a plain static host
+  get user() { return this.cloud && this.cloud.user; },
+  get remote() { return this.local || !!this.user; },   // plans live behind /api rather than in this browser
   lastSaved: '',
+  saveError: '',         // why the account refused the last save, in words for the user
   recent: [],            // the last few texts this window wrote, to tell its own saves from outside edits
 
   async init() {
     try {
       const r = await fetch('api/local', { headers: { accept: 'application/json' } });
-      if (r.ok && (r.headers.get('content-type') || '').includes('json')) { const j = await r.json(); if (j && j.parter) { this.local = true; this.agent = !!j.agent; } }
+      if (r.ok && (r.headers.get('content-type') || '').includes('json')) { const j = await r.json(); if (j && j.cloud) this.cloud = j; else if (j && j.parter) { this.local = true; this.agent = !!j.agent; } }
     } catch (e) { /* static hosting: no API */ }
+    if (this.user) await this.adoptBrowserPlans();
     return this;
+  },
+  /** First sign-in on this device: move the plans made while signed out into the account. */
+  async adoptBrowserPlans() {
+    const mine = ls.get(IDX, []); if (!mine.length || (await this.list()).length) return;
+    const put = (path, type, body) => fetch(path, { method: 'PUT', headers: { 'content-type': type }, body });
+    for (const p of mine) {
+      const data = ls.get(PRE + p.id, null);
+      if (!data || !(await put('api/projects/' + encodeURIComponent(p.id), 'application/json', JSON.stringify(data))).ok) continue;   // over the plan allowance: it stays in this browser
+      const keys = ((await idbOp('readonly', s => s.getAllKeys())) || []).filter(k => String(k).startsWith(p.id + ':'));
+      for (const k of keys) { const v = await idbOp('readonly', s => s.get(k)); if (v) await put('api/blobs/' + encodeURIComponent(k), 'text/plain', v); }
+    }
   },
 
   settings() { return ls.get(SET, {}); },
   saveSettings(s) { ls.set(SET, s); },
 
   async list() {
-    if (this.local) { const r = await fetch('api/projects'); return r.ok ? r.json() : []; }
+    if (this.remote) { const r = await fetch('api/projects'); return r.ok ? r.json() : []; }
     return ls.get(IDX, []).sort((a, b) => (b.modified || 0) - (a.modified || 0));
   },
   async load(id) {
     let raw;
-    if (this.local) { const r = await fetch('api/projects/' + encodeURIComponent(id)); if (!r.ok) return null; raw = await r.json(); }
+    if (this.remote) { const r = await fetch('api/projects/' + encodeURIComponent(id)); if (!r.ok) return null; raw = await r.json(); }
     else raw = ls.get(PRE + id, null);
     if (!raw) return null;
     const scene = normalizeScene(raw);
@@ -72,9 +89,10 @@ export const store = {
   async save(id, scene) {
     const data = serialize(scene), text = JSON.stringify(data);
     if (text === this.lastSaved) return true;
-    if (this.local) {
+    this.saveError = '';
+    if (this.remote) {
       const r = await fetch('api/projects/' + encodeURIComponent(id), { method: 'PUT', headers: { 'content-type': 'application/json' }, body: text });
-      if (!r.ok) return false;
+      if (!r.ok) { this.saveError = ((await r.json().catch(() => ({}))).error || {}).message || ''; return false; }
     } else {
       if (!ls.set(PRE + id, data)) return false;
       const idx = ls.get(IDX, []).filter(p => p.id !== id);
@@ -90,27 +108,27 @@ export const store = {
     return id;
   },
   async remove(id) {
-    if (this.local) await fetch('api/projects/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (this.remote) await fetch('api/projects/' + encodeURIComponent(id), { method: 'DELETE' });
     else { ls.del(PRE + id); ls.set(IDX, ls.get(IDX, []).filter(p => p.id !== id)); }
     for (const k of await this.blobKeys(id)) await this.delBlob(k);
   },
 
   // ---- pictures, stored as data URLs under "<project>:<name>"
   async putBlob(key, dataUrl) {
-    if (this.local) { const r = await fetch('api/blobs/' + encodeURIComponent(key), { method: 'PUT', headers: { 'content-type': 'text/plain' }, body: dataUrl }); return r.ok; }
+    if (this.remote) { const r = await fetch('api/blobs/' + encodeURIComponent(key), { method: 'PUT', headers: { 'content-type': 'text/plain' }, body: dataUrl }); return r.ok; }
     mem.set(key, dataUrl); await idbOp('readwrite', s => s.put(dataUrl, key)); return true;
   },
   async getBlob(key) {
-    if (this.local) { const r = await fetch('api/blobs/' + encodeURIComponent(key)); return r.ok ? r.text() : null; }
+    if (this.remote) { const r = await fetch('api/blobs/' + encodeURIComponent(key)); return r.ok ? r.text() : null; }
     if (mem.has(key)) return mem.get(key);
     const v = await idbOp('readonly', s => s.get(key)); return v || null;
   },
   async delBlob(key) {
-    if (this.local) { await fetch('api/blobs/' + encodeURIComponent(key), { method: 'DELETE' }); return; }
+    if (this.remote) { await fetch('api/blobs/' + encodeURIComponent(key), { method: 'DELETE' }); return; }
     mem.delete(key); await idbOp('readwrite', s => s.delete(key));
   },
   async blobKeys(id) {
-    if (this.local) { const r = await fetch('api/blobs?prefix=' + encodeURIComponent(id + ':')); return r.ok ? r.json() : []; }
+    if (this.remote) { const r = await fetch('api/blobs?prefix=' + encodeURIComponent(id + ':')); return r.ok ? r.json() : []; }
     const keys = (await idbOp('readonly', s => s.getAllKeys())) || [];
     return [...new Set([...keys, ...mem.keys()])].filter(k => String(k).startsWith(id + ':'));
   },

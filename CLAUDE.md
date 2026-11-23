@@ -1,12 +1,13 @@
 # Parter: notes for Claude Code
 
 Floor plan → furnished rooms → 3D views → AI renders. Static web app in `public/`, no build
-step, no backend. Optional local server and MCP server in Node. MIT.
+step. Optional local server and MCP server in Node. Optional hosted backend in `functions/api`
+(Cloudflare Pages Function + D1 + R2): accounts, cloud plans, sharing, AI allowance, Stripe. MIT.
 
 ## Commands
 
 - `npm start` runs the local server at http://localhost:4173 (plans as files in `./projects`)
-- `npm test` runs all tests (`node --test tests/*.test.mjs`); keep them green
+- `npm test` runs all tests (`node --experimental-sqlite --test tests/*.test.mjs`); keep them green
 - `npm run docs` regenerates `docs/IMPORT.md` from the prompts in code
 - `npm run mcp` runs the MCP server on stdio (normally started by the client via `.mcp.json`)
 
@@ -38,11 +39,17 @@ calls `A.commit(struct)`.
 - Add an assistant ability: a tool in `core/ops.js`, plus a test in `tests/core.test.mjs`.
 - Add a model provider: `ai/providers.js` (`PRESETS`, `modelStep`, `generateImage`).
 - Plan-reading instructions: `IMPORT_GUIDE` in `ai/assistant.js`, then `npm run docs`.
-- Storage (browser vs. local files): `ui/store.js`. Local API: `server/local.mjs`.
+- Storage (browser vs. local files vs. account): `ui/store.js`. Local API: `server/local.mjs`.
+- Hosted API: `functions/api/[[path]].js`, same `/api/projects` and `/api/blobs` routes as the
+  local server. Tables in `migrations/`. Tests in `tests/cloud.test.mjs` (SQLite stands in for D1).
+- Pages: `public/index.html` is the landing page, `public/app.html` the editor.
 - The sample house: `public/projects/frumusita.json`. A test pins its room areas to the
   drawing; if you change the room detector, that test tells you whether you broke it.
 
 ## Known gaps (good first tasks)
+
+- The hosted backend's Google sign-in, email sending, Stripe and AI proxy were tested with
+  fake fetches only. `terms.html` and `privacy.html` are drafts, not reviewed by a lawyer.
 
 - AI paths are tested with fake fetches only. Nobody has yet run chat, plan reading or renders
   against the live Anthropic, OpenAI or Gemini APIs. Do that first and fix what breaks.
@@ -57,6 +64,6 @@ calls `A.commit(struct)`.
 ## Testing the UI without a browser
 
 The UI has no automated tests in the repo. During development it was exercised by bundling
-`public/js/ui/app.js` with esbuild into an IIFE and loading `index.html` in jsdom with
+`public/js/ui/app.js` with esbuild into an IIFE and loading `app.html` in jsdom with
 `canvas` and headless `gl`. `window.parter` exposes the app state (`scene`, `an`, `toScreen`,
 `panels`) for that purpose.

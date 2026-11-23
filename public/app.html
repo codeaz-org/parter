@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Parter – from floor plan to furnished rooms</title>
+<meta name="description" content="Turn a floor plan into rooms you can furnish, walk through in 3D and hand to an image generator. Open source.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231D2832'/%3E%3Cpath d='M7 25V7h18v18H7zm7-18v8m0 4v6m0-10h11' stroke='%23fff' stroke-width='2.4' fill='none'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<header class="bar">
+  <button type="button" class="block" id="projBtn" aria-label="Projects">
+    <span class="t" id="projName">Parter</span>
+    <span class="s" id="scaleRead">Scale 1:100</span>
+  </button>
+  <div class="seg" id="planModeSeg" role="group" aria-label="What to edit">
+    <button type="button" data-pm="furnish" aria-pressed="true">Furnish</button>
+    <button type="button" data-pm="build" aria-pressed="false">Build</button>
+  </div>
+  <div class="grow"></div>
+  <div class="seg" id="viewSeg" role="group" aria-label="Workspace">
+    <button type="button" data-view="plan" aria-pressed="true">Plan</button>
+    <button type="button" data-view="3d" aria-pressed="false">3D</button>
+  </div>
+  <button type="button" class="btn" id="chatBtn">Assistant</button>
+  <button type="button" class="btn primary" id="exportBtn">Export</button>
+  <button type="button" class="btn" id="acctBtn" hidden>Sign in</button>
+</header>
+
+<main class="work" id="work" data-view="plan">
+  <section class="pane plan-pane" aria-label="Floor plan">
+    <canvas id="plan" tabindex="0" aria-label="Floor plan"></canvas>
+    <div class="float hint" id="hint" hidden></div>
+
+    <!-- furnish dock -->
+    <div class="float dock" id="dock">
+      <button type="button" class="btn primary" id="addBtn">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10 4v12M4 10h12"/></svg>Add furniture</button>
+      <button type="button" class="btn" data-undo disabled>Undo</button>
+      <div class="menu">
+        <button type="button" class="btn" id="moreBtn" aria-haspopup="true" aria-expanded="false" aria-label="More plan actions">More</button>
+        <div class="pop" id="morePop" hidden>
+          <button type="button" id="fitBtn">Fit plan to screen</button>
+          <button type="button" id="emptyBtn">Remove all furniture</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- build dock -->
+    <div class="float dock" id="buildDock" hidden>
+      <button type="button" class="btn" id="wallTool" aria-pressed="false">Draw wall</button>
+      <button type="button" class="btn" id="roomTool" aria-pressed="false">Name room</button>
+      <button type="button" class="btn" id="underBtn" aria-expanded="false">Scan</button>
+      <button type="button" class="btn" data-undo disabled>Undo</button>
+    </div>
+
+    <!-- furniture -->
+    <div class="float selbar" id="selBar" hidden>
+      <div class="selhead"><b id="selName"></b><span id="selSize"></span><div class="grow"></div>
+        <button type="button" class="btn quiet done" data-done>Done</button></div>
+      <div class="selrow">
+        <button type="button" class="btn" id="rotL" aria-label="Turn left 15 degrees"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9a6 6 0 1 1 2 5.5"/><path d="M4 4v5h5"/></svg></button>
+        <button type="button" class="btn" id="rotR" aria-label="Turn right 15 degrees"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 9a6 6 0 1 0-2 5.5"/><path d="M16 4v5h-5"/></svg></button>
+        <button type="button" class="btn" id="rot90">90°</button>
+        <button type="button" class="btn" id="flipBtn">Mirror</button>
+        <span class="step" id="stepW"><button type="button" data-d="-1" aria-label="Narrower">−</button><i>Width</i><button type="button" data-d="1" aria-label="Wider">+</button></span>
+        <span class="step" id="stepD"><button type="button" data-d="-1" aria-label="Shallower">−</button><i>Depth</i><button type="button" data-d="1" aria-label="Deeper">+</button></span>
+        <span class="step" id="stepH"><button type="button" data-d="-1" aria-label="Lower">−</button><i>Height</i><button type="button" data-d="1" aria-label="Taller">+</button></span>
+        <button type="button" class="btn" id="dupBtn">Duplicate</button>
+        <button type="button" class="btn danger" id="delBtn">Delete</button>
+      </div>
+    </div>
+
+    <!-- window / door -->
+    <div class="float selbar" id="winBar" hidden>
+      <div class="selhead"><b id="winName">Window</b><span id="winSize"></span><div class="grow"></div>
+        <button type="button" class="btn quiet done" data-done>Done</button></div>
+      <div class="selrow" id="winRow">
+        <span class="step" data-k="w"><button type="button" data-d="-1" aria-label="Narrower">−</button><i>Width</i><button type="button" data-d="1" aria-label="Wider">+</button></span>
+        <span class="step" data-k="h"><button type="button" data-d="-1" aria-label="Shorter">−</button><i>Height</i><button type="button" data-d="1" aria-label="Taller">+</button></span>
+        <span class="step" data-k="s" id="sillStep"><button type="button" data-d="-1" aria-label="Lower sill">−</button><i>Sill</i><button type="button" data-d="1" aria-label="Higher sill">+</button></span>
+        <span class="chips row" id="doorState">
+          <button type="button" data-st="open" aria-pressed="false">Open</button>
+          <button type="button" data-st="closed" aria-pressed="false">Closed</button>
+          <button type="button" data-st="wall" aria-pressed="false">Walled up</button>
+        </span>
+        <button type="button" class="btn" id="glassBtn" aria-pressed="false">Glass door</button>
+        <button type="button" class="btn" id="swingBtn">Flip swing</button>
+        <span class="chips row" id="opKind">
+          <button type="button" data-k="win" aria-pressed="false">Window</button>
+          <button type="button" data-k="door" aria-pressed="false">Door</button>
+          <button type="button" data-k="open" aria-pressed="false">Opening</button>
+          <button type="button" data-k="garage" aria-pressed="false">Garage</button>
+        </span>
+        <button type="button" class="btn danger" id="opDel">Remove</button>
+      </div>
+    </div>
+
+    <!-- wall -->
+    <div class="float selbar" id="wallBar" hidden>
+      <div class="selhead"><b>Wall</b><span id="wallSize"></span><div class="grow"></div>
+        <button type="button" class="btn quiet done" data-done>Done</button></div>
+      <div class="selrow">
+        <span class="step" id="wallThick"><button type="button" data-d="-1" aria-label="Thinner">−</button><i>Thickness</i><button type="button" data-d="1" aria-label="Thicker">+</button></span>
+        <button type="button" class="btn" id="wallWin">Add window</button>
+        <button type="button" class="btn" id="wallDoor">Add door</button>
+        <button type="button" class="btn" id="wallDiv" aria-pressed="false">Divider only</button>
+        <button type="button" class="btn danger" id="wallDel">Delete</button>
+      </div>
+    </div>
+
+    <!-- room label -->
+    <div class="float selbar" id="roomBar" hidden>
+      <div class="selhead"><b>Room</b><span id="roomSize"></span><div class="grow"></div>
+        <button type="button" class="btn quiet done" data-done>Done</button></div>
+      <div class="selrow">
+        <input type="text" id="roomName" class="in" placeholder="Room name" aria-label="Room name" maxlength="40" style="min-width:150px;flex:1">
+        <span class="chips row" id="roomFloor">
+          <button type="button" data-f="tile" aria-pressed="false">Tile</button>
+          <button type="button" data-f="wood" aria-pressed="false">Wood</button>
+          <button type="button" data-f="bath" aria-pressed="false">Bathroom</button>
+          <button type="button" data-f="conc" aria-pressed="false">Concrete</button>
+        </span>
+        <button type="button" class="btn danger" id="roomDel">Remove name</button>
+      </div>
+    </div>
+
+    <!-- scanned plan underneath -->
+    <div class="float panel under" id="underPanel" hidden>
+      <div class="field"><div class="lab">Scanned plan underneath</div>
+        <div class="chips">
+          <button type="button" id="underPick">Choose picture</button>
+          <button type="button" id="underShow" aria-pressed="true">Show</button>
+          <button type="button" id="underMove" aria-pressed="false">Move and resize</button>
+        </div></div>
+      <div class="field"><label for="underOp">See-through <output id="underOpOut"></output></label><input type="range" id="underOp" min="0.1" max="1" step="0.05"></div>
+      <div class="field"><div class="chips">
+        <button type="button" id="underCal">Set scale from two points</button>
+        <button type="button" id="underRead">Read walls with AI</button>
+        <button type="button" id="underDel">Remove picture</button>
+      </div></div>
+      <input type="file" id="underFile" accept="image/*" hidden>
+    </div>
+  </section>
+
+  <section class="pane view-pane" aria-label="3D preview">
+    <canvas id="gl" tabindex="0" aria-label="3D preview. Drag to look around."></canvas>
+    <div class="nogl" id="nogl" hidden>The 3D preview needs WebGL, and this browser has it switched off. The plan still works; open this page in another browser to see and export 3D views.</div>
+    <div class="float vtop">
+      <div class="seg" id="modeSeg" role="group" aria-label="Viewpoint">
+        <button type="button" data-mode="eye" aria-pressed="true">Eye level</button>
+        <button type="button" data-mode="doll" aria-pressed="false">Dollhouse</button>
+      </div>
+      <button type="button" class="btn" id="setBtn" aria-expanded="false">Shot settings</button>
+    </div>
+    <div class="float panel" id="panel" hidden>
+      <div class="field"><div class="lab">Picture shape</div>
+        <div class="chips" id="aspChips">
+          <button type="button" data-a="4:3" aria-pressed="true">4:3</button>
+          <button type="button" data-a="16:9" aria-pressed="false">16:9</button>
+          <button type="button" data-a="1:1" aria-pressed="false">1:1</button>
+          <button type="button" data-a="3:4" aria-pressed="false">3:4</button>
+        </div></div>
+      <div class="field"><label for="hRange">Eye height <output id="hOut"></output></label><input type="range" id="hRange" min="0.6" max="2.6" step="0.05"></div>
+      <div class="field"><label for="fRange">Lens angle <output id="fOut"></output></label><input type="range" id="fRange" min="30" max="100" step="1"></div>
+      <div class="field"><label for="cRange">Ceiling height <output id="cOut"></output></label><input type="range" id="cRange" min="2.2" max="4" step="0.05"></div>
+    </div>
+    <div class="float vbot">
+      <div class="pad" id="pad" aria-label="Move the camera">
+        <button type="button" class="f" data-m="f" aria-label="Forward"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l6-6 6 6"/></svg></button>
+        <button type="button" class="l" data-m="l" aria-label="Step left"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l-6 6 6 6"/></svg></button>
+        <button type="button" class="b" data-m="b" aria-label="Back"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8l6 6 6-6"/></svg></button>
+        <button type="button" class="r" data-m="r" aria-label="Step right"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4l6 6-6 6"/></svg></button>
+      </div>
+      <div class="orbhint" id="orbHint" hidden>Drag to orbit, pinch or scroll to zoom</div>
+      <div class="seg" id="lookSeg" role="group" aria-label="Look">
+        <button type="button" data-look="colour" aria-pressed="true">Colour</button>
+        <button type="button" data-look="clay" aria-pressed="false">Clay</button>
+        <button type="button" data-look="depth" aria-pressed="false">Depth</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- assistant -->
+<aside class="chat" id="chat" hidden aria-label="Assistant">
+  <header><h2>Assistant</h2><span class="eng" id="chatEngine"></span><div class="grow"></div>
+    <button type="button" class="btn quiet" id="chatSettings">Settings</button>
+    <button type="button" class="btn quiet" id="chatClose">Close</button></header>
+  <div class="log" id="chatLog" aria-live="polite"></div>
+  <div class="compose">
+    <textarea id="chatIn" rows="2" placeholder="Ask for a change, e.g. “put the sofa on the opposite wall”" aria-label="Message to the assistant"></textarea>
+    <button type="button" class="btn primary" id="chatSend">Send</button>
+  </div>
+</aside>
+
+<!-- furniture catalogue -->
+<div class="scrim" id="catScrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="catTitle">
+    <header><h2 id="catTitle">Add furniture</h2><button type="button" class="btn quiet" data-close>Close</button></header>
+    <div class="body" id="catBody"></div>
+  </div>
+</div>
+
+<!-- projects -->
+<div class="scrim" id="projScrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="projTitle">
+    <header><h2 id="projTitle">Your plans</h2><button type="button" class="btn quiet" data-close>Close</button></header>
+    <div class="body">
+      <div class="plist" id="projList"></div>
+      <h3>Start another</h3>
+      <div class="chips">
+        <button type="button" id="newFromImg">From a plan picture</button>
+        <button type="button" id="newEmpty">Empty plan</button>
+        <button type="button" id="newSample">Sample house</button>
+        <button type="button" id="importJson">Open a .json file</button>
+      </div>
+      <input type="file" id="jsonFile" accept=".json,application/json" hidden>
+      <p class="fine" id="storeNote"></p>
+    </div>
+  </div>
+</div>
+
+<!-- new from picture -->
+<div class="scrim" id="impScrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="impTitle">
+    <header><h2 id="impTitle">Start from a plan picture</h2><button type="button" class="btn quiet" data-close>Close</button></header>
+    <div class="body">
+      <button type="button" class="drop" id="impPick">Choose a photo or scan of the floor plan</button>
+      <input type="file" id="impFile" accept="image/*" hidden>
+      <img class="prev" id="impPrev" alt="The plan you chose" hidden>
+      <label class="lab2" for="impHint">Anything the reader should know (optional)</label>
+      <textarea id="impHint" class="short" placeholder="e.g. Scale 1:100. The house is 10.30 m wide. Ignore the garage."></textarea>
+      <div class="rowend gap">
+        <button type="button" class="btn" id="impTrace" disabled>Trace it myself</button>
+        <button type="button" class="btn primary" id="impRead" disabled>Read it with AI</button>
+      </div>
+      <p class="fine" id="impStatus"></p>
+      <ol class="how">
+        <li>The reader turns the drawing into walls, doors, windows and rooms. Plans with printed dimensions work best.</li>
+        <li>You get the scan underneath the result, so you can see what it got wrong and fix it in Build.</li>
+        <li>Always check the room sizes against the drawing before you furnish.</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<!-- export -->
+<div class="scrim" id="expScrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="expTitle">
+    <header><h2 id="expTitle">Export and render</h2><button type="button" class="btn quiet" data-close>Close</button></header>
+    <div class="body">
+      <img class="prev" id="prev" alt="Preview of the current camera view">
+      <h3>Look</h3>
+      <div class="chips" id="styleChips"></div>
+      <textarea id="prompt" aria-label="Prompt text" style="margin-top:8px"></textarea>
+      <div class="rowend gap">
+        <button type="button" class="btn" id="copyBtn">Copy prompt</button>
+        <button type="button" class="btn primary" id="genBtn">Generate render</button>
+      </div>
+      <label class="check"><input type="checkbox" id="genDepth"> Also send the depth map as a second reference</label>
+      <p class="fine" id="genStatus"></p>
+      <div class="gallery" id="gallery"></div>
+      <h3>Save pictures to use anywhere</h3>
+      <div class="saves">
+        <div class="save"><div><b>Colour view</b><span>The main reference picture: shapes, colours and light.</span></div><button type="button" class="btn" data-save="colour">Save</button></div>
+        <div class="save"><div><b>Depth map</b><span>For tools with a depth or structure input. It locks the geometry hardest.</span></div><button type="button" class="btn" data-save="depth">Save</button></div>
+        <div class="save"><div><b>Clay view</b><span>Plain white model, for tools that restyle everything.</span></div><button type="button" class="btn" data-save="clay">Save</button></div>
+        <div class="save"><div><b>Floor plan</b><span>Top-down plan with your furniture.</span></div><button type="button" class="btn" data-save="plan">Save</button></div>
+        <div class="save"><div><b>Project file</b><span>The whole plan as .json, to back up or open elsewhere.</span></div><button type="button" class="btn" data-save="json">Save</button></div>
+      </div>
+      <h3>Using another tool</h3>
+      <ol class="how">
+        <li>Save the colour view, and the depth map if the tool accepts one.</li>
+        <li>Upload it as the reference or structure image, not as loose inspiration.</li>
+        <li>Paste the prompt. Keep the reference strength high so walls, windows and furniture stay where you put them.</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<!-- account -->
+<div class="scrim" id="acctScrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="acctTitle">
+    <header><h2 id="acctTitle">Account</h2><button type="button" class="btn quiet" data-close>Close</button></header>
+    <div class="body">
+      <div id="acctIn">
+        <p>Sign in to keep your plans in an account, open them on any device and share them with a link. The plans already in this browser move into your account the first time you sign in.</p>
+        <div class="rowend"><a class="btn" id="acctGoogle" href="api/auth/google" hidden>Continue with Google</a></div>
+        <div id="acctMail">
+          <form class="form" id="acctForm">
+            <label for="acctEmail">Email</label><input id="acctEmail" class="in" type="email" autocomplete="email" required placeholder="you@example.com">
+          </form>
+          <div class="rowend"><button type="submit" form="acctForm" class="btn primary" id="acctSend">Email me a sign-in link</button></div>
+          <p class="fine">No password. We send a link that signs you in.</p>
+        </div>
+      </div>
+      <div id="acctOut" hidden>
+        <h3 id="acctWho"></h3>
+        <p><span id="acctPlan"></span><br><span id="acctUse"></span></p>
+        <p class="fine" id="acctUpNote" hidden></p>
+        <div class="rowend gap">
+          <button type="button" class="btn primary" id="acctUp" hidden>Upgrade to Pro</button>
+          <button type="button" class="btn" id="acctBill" hidden>Manage billing</button>
+          <button type="button" class="btn" id="acctSignOut">Sign out</button>
+        </div>
+        <h3>Close the account</h3>
+        <p class="fine">Removes your account and every plan and picture saved in it. Save a project file first (Export) for anything you want to keep.</p>
+        <div class="rowend"><button type="button" class="btn danger" id="acctDelete">Delete account</button></div>
+      </div>
+      <p class="fine" id="acctStatus" role="status"></p>
+      <p class="fine"><a href="terms.html">Terms</a> · <a href="privacy.html">Privacy</a></p>
+    </div>
+  </div>
+</div>
+
+<!-- settings -->
+<div class="scrim" id="setScrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+    <header><h2 id="setTitle">Assistant and render settings</h2><button type="button" class="btn quiet" data-close>Close</button></header>
+    <div class="body">
+      <h3>Assistant</h3>
+      <div class="form">
+        <label for="sChat">Runs on</label><select id="sChat" class="in"></select>
+        <label for="sKey" class="k">API key</label><input id="sKey" class="in k" type="password" autocomplete="off" spellcheck="false">
+        <label for="sModel" class="k">Model</label><input id="sModel" class="in k" type="text" autocomplete="off" spellcheck="false">
+        <label for="sBase" class="k">Address</label><input id="sBase" class="in k" type="text" autocomplete="off" spellcheck="false">
+      </div>
+      <p class="fine" id="sChatNote"></p>
+      <h3>Renders</h3>
+      <div class="form">
+        <label for="sImg">Made by</label><select id="sImg" class="in"></select>
+        <label for="sImgKey">API key</label><input id="sImgKey" class="in" type="password" autocomplete="off" spellcheck="false">
+        <label for="sImgModel">Model</label><input id="sImgModel" class="in" type="text" autocomplete="off" spellcheck="false">
+      </div>
+      <p class="fine">Keys stay in this browser and are sent only to the provider you chose. Anyone who can use this browser profile can read them, so use keys with a spending limit.</p>
+      <div class="rowend gap"><button type="button" class="btn danger" id="sForget">Forget keys</button><button type="button" class="btn primary" id="sSave">Save</button></div>
+    </div>
+  </div>
+</div>
+
+<div class="hold" id="hold" hidden>
+  <img id="holdImg" alt="Picture">
+  <p>Press and hold the picture, then choose Save. On a computer, right-click it.</p>
+  <div class="rowend gap"><button type="button" class="btn primary" id="holdSave">Save picture</button><button type="button" class="btn" id="holdClose">Close</button></div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="vendor/three.min.js"></script>
+<script type="module" src="js/ui/app.js"></script>
+</body>
+</html>

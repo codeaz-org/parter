@@ -199,3 +199,4 @@ textarea.short{min-height:64px}
 .form{display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center}
 .form label{font-family:var(--ui);font-weight:600;font-size:14.5px}
 .sheet .body>.prev{margin-bottom:4px}
+a.btn{text-decoration:none;color:inherit}

@@ -3,12 +3,15 @@
 Turn a floor plan into rooms you can furnish, walk through in 3D, and hand to an image
 generator. Talk to an assistant to make changes. Open source, MIT.
 
-Parter is a static web app with no backend. You can host it for free, and it never sees
-anyone's plans or API keys: plans stay in the browser, and AI requests go straight from the
-browser to the provider you choose.
+Parter is a static web app. Without an account, plans stay in the browser and AI requests go
+straight from the browser to the provider you choose, so the site never sees them. The hosted
+edition at [parter.codeaz.org](https://parter.codeaz.org) adds an optional backend
+(`functions/api`): accounts, plans saved online, share links, an included AI allowance and a
+paid plan. See [Hosted edition](#hosted-edition).
 
-> **Status: 0.1, early.** The editor, storage, local server and MCP server are covered by
-> automated tests. The AI features (chat, plan reading, renders) have been tested against
+> **Status: 0.1, early.** The editor, storage, local server, MCP server and hosted backend are
+> covered by automated tests. The backend's Google sign-in, email sending, Stripe and AI calls
+> have only been tested against stand-ins. The AI features (chat, plan reading, renders) have been tested against
 > stand-in providers only, not yet against the live APIs, and the interface has not been
 > through real-browser or phone testing. Expect rough edges and please report them.
 
@@ -59,9 +62,39 @@ to `public` with no build command. `wrangler.toml` already says the same thing.
 npx wrangler pages deploy public --project-name parter
 ```
 
-Any other static host works too (GitHub Pages, Netlify, an S3 bucket): serve `public`.
+Any other static host works too (GitHub Pages, Netlify, an S3 bucket): serve `public`. The
+editor is `app.html`; `index.html` is the landing page.
 
-When hosted, plans live in each visitor's own browser storage. Nothing is uploaded to you.
+On a plain static host, plans live in each visitor's own browser storage. Nothing is uploaded
+to you, and the sign-in button does not appear.
+
+## Hosted edition
+
+Deployed from the repository root, `wrangler pages deploy public` also publishes
+`functions/api/[[path]].js`, one Pages Function that serves everything under `/api`. It needs
+a D1 database and an R2 bucket (see `wrangler.toml`):
+
+```bash
+npx wrangler d1 create parter                 # put the id in wrangler.toml
+npx wrangler r2 bucket create parter-blobs
+npx wrangler d1 migrations apply parter --remote
+```
+
+Every outside service is optional. A feature appears in the app once its settings exist
+(`npx wrangler pages secret put NAME --project-name parter`):
+
+| Feature | Needs |
+|---|---|
+| Sign in by emailed link | Cloudflare Email Sending enabled for your domain, and `MAIL_FROM` in `wrangler.toml` |
+| Sign in with Google | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`; redirect address `https://<site>/api/auth/google/callback` |
+| Included assistant and plan reading | `ANTHROPIC_API_KEY` (optional `CHAT_MODEL`) |
+| Included renders | `OPENAI_API_KEY` or `GEMINI_API_KEY` (optional `IMAGE_MODEL`) |
+| Paid plan | `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`; webhook address `https://<site>/api/stripe/webhook` with the events `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted` |
+
+Monthly allowances per plan are `LIMITS` at the top of the function. To try it locally:
+`echo DEV_LINKS=1 > .dev.vars`, `npx wrangler d1 migrations apply parter --local`,
+`npx wrangler pages dev public`. With `DEV_LINKS=1` the sign-in link is returned to the
+browser instead of being emailed.
 
 ## Setting up the AI features
 
@@ -101,7 +134,8 @@ The tools are listed in [docs/IMPORT.md](docs/IMPORT.md). Any MCP client can use
 
 ```
 public/                 the whole app; this folder is what gets hosted
-  index.html, css/
+  index.html              landing page; terms.html, privacy.html
+  app.html, css/          the editor
   js/core/              no DOM in here: runs in the browser, in Node and in tests
     scene.js            the scene document: validate, repair, helpers
     rooms.js            finds rooms, areas and the footprint from the walls
@@ -116,6 +150,8 @@ public/                 the whole app; this folder is what gets hosted
   js/ui/                the editor itself
   projects/             the bundled sample
   vendor/three.min.js   three.js r128 (MIT)
+functions/api/          hosted backend: accounts, cloud plans, sharing, AI allowance, billing
+migrations/             its database tables
 server/local.mjs        optional local server: files on disk, live updates, Claude Code hand-off
 mcp/server.mjs          MCP server exposing ops.js to Claude Code and other clients
 tests/                  node --test
@@ -127,7 +163,7 @@ assistant, the plan reader, the MCP server and the exports all read and write th
 through the same functions. See [docs/SCENE.md](docs/SCENE.md).
 
 ```bash
-npm test           # core, AI adapters (with a fake fetch), local server, MCP round trip
+npm test           # core, AI adapters (with a fake fetch), local server, MCP round trip, hosted backend
 npm run docs       # regenerate docs/IMPORT.md from the prompts in the code
 ```
 
@@ -138,7 +174,7 @@ npm run docs       # regenerate docs/IMPORT.md from the prompts in the code
 - Furniture is built from boxes, cylinders and spheres. It is a layout model for image
   generators to dress, not a finished render.
 - Plan reading depends entirely on the model and the drawing. Always check room sizes.
-- No accounts, sharing or sync. Moving a plan between devices means exporting the project file.
+- A share link hands over a copy; two people cannot edit the same plan together.
 
 ## Roadmap
 
@@ -146,9 +182,7 @@ npm run docs       # regenerate docs/IMPORT.md from the prompts in the code
 - More furniture and a way to add your own pieces without code.
 - OpenAI Responses API support.
 - Multiple cameras per plan and batch renders.
-- A hosted edition for people who do not want to manage API keys: accounts, cloud projects
-  and sharing, with AI usage included. The editor stays open source; the hosted edition would
-  add a small backend in front of the same scene format.
+- Live tests of the hosted edition against Google, Stripe and the AI providers.
 
 ## Licence
 

@@ -49,7 +49,7 @@ let saveT = 0;
 A.save = () => {
   A.scene.meta.modified = Date.now();
   clearTimeout(saveT);
-  saveT = setTimeout(async () => { if (A.id && !(await store.save(A.id, A.scene))) A.toast('Could not save. Storage may be full: export the project file to keep your work.'); }, 350);
+  saveT = setTimeout(async () => { if (A.id && !(await store.save(A.id, A.scene))) A.toast(store.saveError || 'Could not save. Storage may be full: export the project file to keep your work.'); }, 350);
 };
 A.structChanged = () => { A.an = analyze(A.scene); view.rebuildHouse(); };
 /** Call after any edit. `struct` = walls, openings, rooms or ceiling changed. */
