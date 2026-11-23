@@ -1,0 +1,4 @@
+# Cloudflare Pages: the site is the "public" folder, served as it is. There is no build step.
+name = "parter"
+pages_build_output_dir = "public"
+compatibility_date = "2026-01-01"

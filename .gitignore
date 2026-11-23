@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+*.tmp
+.wrangler/
+
+# Your own plans and pictures (local mode). Remove these two lines if you want them in git.
+projects/*
+!projects/.gitkeep

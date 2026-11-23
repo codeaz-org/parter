@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "parter": {
+      "command": "node",
+      "args": ["mcp/server.mjs"]
+    }
+  }
+}

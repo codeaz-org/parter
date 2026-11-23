@@ -1,0 +1,21 @@
+{
+  "name": "parter",
+  "version": "0.1.0",
+  "description": "Floor plan to furnished 3D scene to AI render. Open-source room planner with an assistant you can talk to.",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server/local.mjs",
+    "mcp": "node mcp/server.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "docs": "node scripts/gen-docs.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.8"
+  }
+}
